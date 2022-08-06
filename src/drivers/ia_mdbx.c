@@ -87,6 +87,14 @@ struct iacontext {
   MDBX_cursor *cursor;
 };
 
+static void ia_mdbx_dbglog(MDBX_log_level_t loglevel, const char *function,
+                           int line, const char *fmt, va_list args) {
+  (void)loglevel;
+  (void)function;
+  (void)line;
+  ia_vlog(fmt, args);
+}
+
 static int ia_mdbx_open(const char *datadir) {
   unsigned modeflags;
   iadriver *drv = ioarena.driver;
@@ -94,6 +102,8 @@ static int ia_mdbx_open(const char *datadir) {
   drv->priv = calloc(1, sizeof(iaprivate));
   if (drv->priv == NULL)
     return -1;
+
+  mdbx_setup_debug(MDBX_LOG_NOTICE, MDBX_DBG_DONTCHANGE, ia_mdbx_dbglog);
 
   iaprivate *self = drv->priv;
   self->dbi = INVALID_DBI;
@@ -222,6 +232,7 @@ static void ia_mdbx_thread_dispose(iacontext *ctx) {
     if (err != MDBX_SUCCESS)
       ia_log("error: %s, %s (%d)", "mdbx_txn_abort", mdbx_strerror(err), err);
     assert(err == 0);
+    ctx->txn = NULL;
   }
   free(ctx);
 }
