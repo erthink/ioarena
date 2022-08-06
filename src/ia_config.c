@@ -343,8 +343,10 @@ int ia_parse_option_bool(const char **parg, const char *opt, int8_t *target) {
   else
     return -1 /* invalid value */;
 
-  if (!comma)
+  if (!comma) {
+    *parg = value + value_len;
     return 1 /* done */;
+  }
 
   *parg = comma + 1 /* seek after the comma */;
   return **parg == '\0' /* continue if not at the end */;

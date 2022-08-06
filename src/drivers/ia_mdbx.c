@@ -44,8 +44,8 @@ static int ia_mdbx_option(iacontext *ctx, const char *arg) {
     return 0;
   }
 
-  int done = 0;
-  while (*arg && !done) {
+  int done = 1;
+  while (*arg && done > 0) {
     done = ia_parse_option_bool(&arg, "LIFORECLAIM", &globals.liforeclaim);
     if (!done)
       done = ia_parse_option_bool(&arg, "COALESCE", &globals.coalesce);
