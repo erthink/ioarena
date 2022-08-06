@@ -44,115 +44,116 @@ static int ia_quadruple(iadoer *doer, iakv *a, iakv *b) {
   return rc;
 }
 
-static int ia_run_benchmark(iadoer *doer, iabenchmark bench) {
+static int ia_run_benchmark(iadoer *doer, iabenchmark bench, int loops) {
   int rc = 0, rc2;
-  uintmax_t i;
   struct ia_kvpool *pool_a = NULL;
   struct ia_kvpool *pool_b = NULL;
 
-  // const char *name = ia_benchmarkof(bench);
-  // ia_log("<< %s.%s-%d", ioarena.conf.driver, name, doer->nth);
+  const char *name = ia_benchmarkof(bench);
+  ia_log("<< %s.%s-%d, loops %d", ioarena.conf.driver, name, doer->nth, loops);
 
   ia_histogram_reset(&doer->hg, bench);
 
-  for (i = 0; rc == 0 && i < ioarena.conf.count;) {
-    ia_timestamp_t t0;
-    iakv a, b;
-    int j;
+  for (int n = 0; n < loops; ++n)
+    for (size_t i = 0; rc == 0 && i < ioarena.conf.count;) {
+      ia_timestamp_t t0;
+      iakv a, b;
+      int j;
 
-    switch (bench) {
-    case IA_SET:
-    case IA_DELETE:
-    case IA_GET:
-      if (ia_kvgen_get(doer->gen_a, &a, bench != IA_SET))
-        goto bailout;
-
-      t0 = ia_timestamp_ns();
-      rc = ioarena.driver->begin(doer->ctx, bench);
-      if (!rc)
-        rc = ioarena.driver->next(doer->ctx, bench, &a);
-      rc2 = ioarena.driver->done(doer->ctx, bench);
-      ia_histogram_add(&doer->hg, t0,
-                       bench == IA_DELETE ? a.ksize : a.ksize + a.vsize);
-      if (rc == ENOENT) {
-        ia_keynotfound(doer, ia_benchmarkof(bench), &a);
-        if (ioarena.conf.ignore_keynotfound)
-          rc = 0;
-      }
-      if (!rc)
-        rc = rc2;
-      if (rc)
-        goto bailout;
-      ++i;
-      break;
-
-    case IA_CRUD:
-      if (ia_kvgen_get(doer->gen_a, &a, 0) || ia_kvgen_get(doer->gen_b, &b, 0))
-        goto bailout;
-      t0 = ia_timestamp_ns();
-      rc = ioarena.driver->begin(doer->ctx, IA_CRUD);
-      if (!rc)
-        rc = ia_quadruple(doer, &a, &b);
-      if (!rc)
-        rc = ioarena.driver->done(doer->ctx, IA_CRUD);
-      ia_histogram_add(&doer->hg, t0,
-                       a.ksize + a.vsize + b.ksize + b.vsize + a.ksize +
-                           b.ksize + b.vsize);
-      if (rc)
-        goto bailout;
-      ++i;
-      break;
-
-    case IA_BATCH:
-      rc = ia_kvpool_init(&pool_a, doer->gen_a, ioarena.conf.batch_length);
-      if (rc)
-        goto bailout;
-      rc = ia_kvpool_init(&pool_b, doer->gen_b, ioarena.conf.batch_length);
-      if (rc)
-        goto bailout;
-
-      t0 = ia_timestamp_ns();
-      rc = ioarena.driver->begin(doer->ctx, IA_BATCH);
-      for (j = 0; j < ioarena.conf.batch_length; ++j) {
-        if (ia_kvpool_pull(pool_a, &a) || ia_kvpool_pull(pool_b, &b))
+      switch (bench) {
+      case IA_SET:
+      case IA_DELETE:
+      case IA_GET:
+        if (ia_kvgen_get(doer->gen_a, &a, bench != IA_SET))
           goto bailout;
-        rc = ia_quadruple(doer, &a, &b);
-        if (rc || ++i == ioarena.conf.count)
-          break;
-      }
-      if (!rc)
-        rc = ioarena.driver->done(doer->ctx, IA_BATCH);
-      ia_histogram_add(&doer->hg, t0,
-                       (a.ksize + a.vsize + b.ksize + b.vsize + a.ksize +
-                        b.ksize + b.vsize) *
-                           ioarena.conf.batch_length);
-      if (rc)
-        goto bailout;
-      break;
 
-    case IA_ITERATE:
-      t0 = ia_timestamp_ns();
-      rc = ioarena.driver->begin(doer->ctx, IA_ITERATE);
-      while (rc == 0) {
-        a.k = a.v = NULL;
-        a.ksize = a.vsize = 0;
-        rc = ioarena.driver->next(doer->ctx, IA_ITERATE, &a);
-        ia_histogram_add(&doer->hg, t0, a.ksize + a.vsize);
-        if (++i == ioarena.conf.count)
-          break;
         t0 = ia_timestamp_ns();
-      }
-      if (rc == ENOENT)
-        rc = 0;
-      if (!rc)
-        rc = ioarena.driver->done(doer->ctx, IA_ITERATE);
-      break;
+        rc = ioarena.driver->begin(doer->ctx, bench);
+        if (!rc)
+          rc = ioarena.driver->next(doer->ctx, bench, &a);
+        rc2 = ioarena.driver->done(doer->ctx, bench);
+        ia_histogram_add(&doer->hg, t0,
+                         bench == IA_DELETE ? a.ksize : a.ksize + a.vsize);
+        if (rc == ENOENT) {
+          ia_keynotfound(doer, ia_benchmarkof(bench), &a);
+          if (ioarena.conf.ignore_keynotfound)
+            rc = 0;
+        }
+        if (!rc)
+          rc = rc2;
+        if (rc)
+          goto bailout;
+        ++i;
+        break;
 
-    default:
-      assert(0);
-      rc = -1;
+      case IA_CRUD:
+        if (ia_kvgen_get(doer->gen_a, &a, 0) ||
+            ia_kvgen_get(doer->gen_b, &b, 0))
+          goto bailout;
+        t0 = ia_timestamp_ns();
+        rc = ioarena.driver->begin(doer->ctx, IA_CRUD);
+        if (!rc)
+          rc = ia_quadruple(doer, &a, &b);
+        if (!rc)
+          rc = ioarena.driver->done(doer->ctx, IA_CRUD);
+        ia_histogram_add(&doer->hg, t0,
+                         a.ksize + a.vsize + b.ksize + b.vsize + a.ksize +
+                             b.ksize + b.vsize);
+        if (rc)
+          goto bailout;
+        ++i;
+        break;
+
+      case IA_BATCH:
+        rc = ia_kvpool_init(&pool_a, doer->gen_a, ioarena.conf.batch_length);
+        if (rc)
+          goto bailout;
+        rc = ia_kvpool_init(&pool_b, doer->gen_b, ioarena.conf.batch_length);
+        if (rc)
+          goto bailout;
+
+        t0 = ia_timestamp_ns();
+        rc = ioarena.driver->begin(doer->ctx, IA_BATCH);
+        for (j = 0; j < ioarena.conf.batch_length; ++j) {
+          if (ia_kvpool_pull(pool_a, &a) || ia_kvpool_pull(pool_b, &b))
+            goto bailout;
+          rc = ia_quadruple(doer, &a, &b);
+          if (rc || ++i == ioarena.conf.count)
+            break;
+        }
+        if (!rc)
+          rc = ioarena.driver->done(doer->ctx, IA_BATCH);
+        ia_histogram_add(&doer->hg, t0,
+                         (a.ksize + a.vsize + b.ksize + b.vsize + a.ksize +
+                          b.ksize + b.vsize) *
+                             ioarena.conf.batch_length);
+        if (rc)
+          goto bailout;
+        break;
+
+      case IA_ITERATE:
+        t0 = ia_timestamp_ns();
+        rc = ioarena.driver->begin(doer->ctx, IA_ITERATE);
+        while (rc == 0) {
+          a.k = a.v = NULL;
+          a.ksize = a.vsize = 0;
+          rc = ioarena.driver->next(doer->ctx, IA_ITERATE, &a);
+          ia_histogram_add(&doer->hg, t0, a.ksize + a.vsize);
+          if (++i == ioarena.conf.count)
+            break;
+          t0 = ia_timestamp_ns();
+        }
+        if (rc == ENOENT)
+          rc = 0;
+        if (!rc)
+          rc = ioarena.driver->done(doer->ctx, IA_ITERATE);
+        break;
+
+      default:
+        assert(0);
+        rc = -1;
+      }
     }
-  }
 
 bailout:
   ia_histogram_merge(&doer->hg);
@@ -187,7 +188,7 @@ int ia_doer_fulfil(iadoer *doer) {
     iabenchmark bench;
     for (bench = IA_SET; !rc && bench < IA_MAX; bench++) {
       if (doer->benchmask & (1l << bench))
-        rc = ia_run_benchmark(doer, bench);
+        rc = ia_run_benchmark(doer, bench, ioarena.conf.benchmark_list[bench]);
     }
 
     if (++count == ioarena.conf.nrepeat)

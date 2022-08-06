@@ -232,17 +232,17 @@ int ia_configparse(iaconfig *c, int argc, char **argv) {
     ia_log("error: bad key size");
     return -1;
   }
-  char buf[128];
-  snprintf(buf, sizeof(buf), "%s", c->benchmark);
-  char *p;
-  for (p = strtok(buf, ", "); p; p = strtok(NULL, ", ")) {
+  char *p, *tmp = strdup(c->benchmark);
+  for (p = strtok(tmp, ", "); p; p = strtok(NULL, ", ")) {
     iabenchmark bench = ia_benchmark(p);
     if (bench == IA_MAX) {
       ia_log("error: unknown benchmark name '%s'", p);
+      free(tmp);
       return -1;
     }
-    c->benchmark_list[bench] = 1;
+    c->benchmark_list[bench] += 1;
   }
+  free(tmp);
   return 0;
 }
 
